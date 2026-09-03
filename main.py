@@ -8,7 +8,7 @@ from javascript import WebSocket
 # 設定
 # =========================
 
-SERVER_URL = "wss://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev/"
+SERVER_URL = "wss://my-online-game.my-647.workers.dev"
 
 WIDTH = 800
 HEIGHT = 600
