@@ -1,263 +1,177 @@
 import asyncio
-import json
 import pygame
-
 from javascript import WebSocket
-from pyodide.ffi import create_proxy
 
 
-# =========================
-# Cloudflare Worker
-# =========================
+# -------------------------
+# 設定
+# -------------------------
+WIDTH = 800
+HEIGHT = 500
 
 SERVER_URL = "wss://my-online-game.my-647.workers.dev"
 
+BLUE = (0, 100, 255)
+RED = (255, 60, 60)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
-# =========================
+
+# -------------------------
 # Pygame
-# =========================
-
+# -------------------------
 pygame.init()
 
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Online Battle")
 
 clock = pygame.time.Clock()
 
-font = pygame.font.Font(None, 36)
+
+# -------------------------
+# 自分の位置
+# -------------------------
+player_x = 200
+player_y = 250
+
+PLAYER_SIZE = 50
+SPEED = 5
 
 
-# =========================
-# プレイヤー
-# =========================
-
-my_x = 200
-my_y = 250
-
-enemy_x = 600
+# -------------------------
+# 相手の位置
+# -------------------------
+enemy_x = 550
 enemy_y = 250
 
-speed = 5
 
+# -------------------------
+# WebSocket
+# -------------------------
+ws = None
 connected = False
 
 
-# =========================
-# WebSocket
-# =========================
-
-ws = WebSocket.new(SERVER_URL)
-
-
-def websocket_open(event):
-    global connected
-
-    connected = True
-    print("WebSocket connected")
-
-    # 最初の位置を送信
-    send_position()
-
-
-def websocket_error(event):
-    global connected
-
-    connected = False
-    print("WebSocket error")
-
-
-def websocket_close(event):
-    global connected
-
-    connected = False
-    print("WebSocket closed")
-
-
-def websocket_message(event):
-    global enemy_x
-    global enemy_y
+def connect_server():
+    global ws, connected
 
     try:
-        data = json.loads(str(event.data))
+        ws = WebSocket.new(SERVER_URL)
 
-        # 相手の座標
-        if data.get("type") == "position":
+        def on_open(event):
+            global connected
+            connected = True
+            print("WebSocket connected!")
 
-            # 自分のメッセージを受け取った場合は無視
-            if data.get("player") == "me":
-                return
+        def on_error(event):
+            print("WebSocket error")
 
-            enemy_x = int(data["x"])
-            enemy_y = int(data["y"])
+        ws.addEventListener("open", on_open)
+        ws.addEventListener("error", on_error)
 
-            print("Enemy:", enemy_x, enemy_y)
+        print("Connecting to server...")
 
     except Exception as e:
-        print("Receive error:", e)
+        print("WebSocket error:", e)
 
-
-# JavaScriptのイベントにPython関数を登録
-open_proxy = create_proxy(websocket_open)
-error_proxy = create_proxy(websocket_error)
-close_proxy = create_proxy(websocket_close)
-message_proxy = create_proxy(websocket_message)
-
-ws.onopen = open_proxy
-ws.onerror = error_proxy
-ws.onclose = close_proxy
-ws.onmessage = message_proxy
-
-
-# =========================
-# 座標送信
-# =========================
 
 def send_position():
+    if ws is None:
+        return
 
     if not connected:
         return
 
     try:
-
-        data = {
-            "type": "position",
-            "player": "me",
-            "x": my_x,
-            "y": my_y
-        }
-
-        ws.send(json.dumps(data))
-
+        message = f"{player_x},{player_y}"
+        ws.send(message)
     except Exception as e:
-
         print("Send error:", e)
 
 
-# =========================
-# メインループ
-# =========================
-
+# -------------------------
+# ゲーム
+# -------------------------
 async def main():
 
-    global my_x
-    global my_y
+    global player_x
+    global player_y
+    global enemy_x
+    global enemy_y
+
+    connect_server()
 
     running = True
-
-    send_timer = 0
 
     while running:
 
         # -------------------------
         # イベント
         # -------------------------
-
         for event in pygame.event.get():
 
             if event.type == pygame.QUIT:
-
                 running = False
 
-
         # -------------------------
-        # キー入力
+        # キーボード
         # -------------------------
-
         keys = pygame.key.get_pressed()
 
-        if keys[pygame.K_w]:
-            my_y -= speed
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            player_x -= SPEED
 
-        if keys[pygame.K_s]:
-            my_y += speed
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            player_x += SPEED
 
-        if keys[pygame.K_a]:
-            my_x -= speed
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            player_y -= SPEED
 
-        if keys[pygame.K_d]:
-            my_x += speed
-
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            player_y += SPEED
 
         # 画面外に出ないようにする
-
-        my_x = max(0, min(750, my_x))
-        my_y = max(0, min(550, my_y))
-
+        player_x = max(0, min(WIDTH - PLAYER_SIZE, player_x))
+        player_y = max(0, min(HEIGHT - PLAYER_SIZE, player_y))
 
         # -------------------------
-        # 座標を送信
+        # サーバーへ位置送信
         # -------------------------
-
-        send_timer += 1
-
-        if send_timer >= 3:
-
-            send_position()
-
-            send_timer = 0
-
+        send_position()
 
         # -------------------------
         # 描画
         # -------------------------
-
-        screen.fill((30, 30, 30))
-
+        screen.fill((40, 40, 40))
 
         # 自分
         pygame.draw.rect(
             screen,
-            (50, 150, 255),
-            (my_x, my_y, 50, 50)
+            BLUE,
+            (player_x, player_y, PLAYER_SIZE, PLAYER_SIZE)
         )
-
 
         # 相手
         pygame.draw.rect(
             screen,
-            (255, 70, 70),
-            (enemy_x, enemy_y, 50, 50)
+            RED,
+            (enemy_x, enemy_y, PLAYER_SIZE, PLAYER_SIZE)
         )
 
-
         # 接続状態
+        font = pygame.font.Font(None, 32)
 
         if connected:
-
-            text = font.render(
-                "CONNECTED",
-                True,
-                (255, 255, 255)
-            )
-
+            text = font.render("CONNECTED", True, WHITE)
         else:
-
-            text = font.render(
-                "CONNECTING...",
-                True,
-                (255, 255, 255)
-            )
-
+            text = font.render("CONNECTING...", True, WHITE)
 
         screen.blit(text, (20, 20))
 
-
         pygame.display.flip()
 
-
-        # Pygbagでは重要
+        # ★ Pygbagでは重要
         await asyncio.sleep(0)
 
-        clock.tick(60)
-
-
-    ws.close()
-
-    pygame.quit()
-
-
-# =========================
-# 起動
-# =========================
 
 asyncio.run(main())
