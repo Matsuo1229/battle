@@ -1,10 +1,13 @@
 import asyncio
 import json
 import pygame
-
 from javascript import WebSocket
 
 pygame.init()
+
+# =========================
+# ゲーム設定
+# =========================
 
 WIDTH = 800
 HEIGHT = 600
@@ -15,61 +18,82 @@ pygame.display.set_caption("Battle Game")
 clock = pygame.time.Clock()
 
 # =========================
-# WebSocket
+# Cloudflare WebSocket
 # =========================
 
-SERVER_URL = "wss://jankenserver.my-647.workers.dev/"
+SERVER_URL = "wss://my-online-game.my-647.workers.dev"
 
 ws = WebSocket.new(SERVER_URL)
 
 connected = False
 
-# 自分
+# =========================
+# 自分のプレイヤー
+# =========================
+
 player_x = 100
 player_y = 250
 
-# 相手
+player_speed = 5
+
+# =========================
+# 相手のプレイヤー
+# =========================
+
 enemy_x = 650
 enemy_y = 250
 
-player_speed = 5
+
+# =========================
+# WebSocket接続
+# =========================
+
+def on_open(event):
+    global connected
+
+    connected = True
+    print("WebSocket connected")
 
 
 # =========================
-# WebSocket受信
+# 相手からデータを受信
 # =========================
 
 def on_message(event):
-    global enemy_x, enemy_y
+    global enemy_x
+    global enemy_y
 
     try:
-        data = json.loads(event.data)
+        data = json.loads(str(event.data))
 
         if data.get("type") == "player":
-            enemy_x = data["x"]
-            enemy_y = data["y"]
+
+            enemy_x = int(data["x"])
+            enemy_y = int(data["y"])
 
     except Exception as e:
         print("受信エラー:", e)
 
 
-def on_open(event):
-    global connected
-    connected = True
-    print("WebSocket接続成功")
-
+# =========================
+# エラー
+# =========================
 
 def on_error(event):
-    print("WebSocketエラー")
+    print("WebSocket error")
 
 
-ws.addEventListener("message", on_message)
+# =========================
+# 接続イベント登録
+# =========================
+
 ws.addEventListener("open", on_open)
+ws.addEventListener("message", on_message)
 ws.addEventListener("error", on_error)
 
 
 # =========================
-# メインゲーム
+# ゲーム
 # =========================
 
 async def main():
@@ -111,7 +135,7 @@ async def main():
 
 
         # -------------------------
-        # 画面外防止
+        # 画面外に出ない
         # -------------------------
 
         player_x = max(0, min(WIDTH - 50, player_x))
@@ -119,7 +143,7 @@ async def main():
 
 
         # -------------------------
-        # 自分の位置を送信
+        # Cloudflareへ自分の位置を送信
         # -------------------------
 
         if connected:
@@ -138,25 +162,36 @@ async def main():
                 print("送信エラー:", e)
 
 
-        # -------------------------
+        # =========================
         # 描画
-        # -------------------------
+        # =========================
 
         screen.fill((30, 30, 30))
 
-        # 自分（青）
+        # 自分
         pygame.draw.rect(
             screen,
             (0, 120, 255),
             (player_x, player_y, 50, 50)
         )
 
-        # 相手（赤）
+        # 相手
         pygame.draw.rect(
             screen,
             (255, 60, 60),
             (enemy_x, enemy_y, 50, 50)
         )
+
+
+        # 接続状態
+        font = pygame.font.Font(None, 32)
+
+        if connected:
+            text = font.render("CONNECTED", True, (0, 255, 0))
+        else:
+            text = font.render("CONNECTING...", True, (255, 255, 0))
+
+        screen.blit(text, (20, 20))
 
 
         pygame.display.flip()
